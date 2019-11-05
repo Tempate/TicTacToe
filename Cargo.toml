@@ -1,0 +1,10 @@
+[package]
+name = "TicTacToe"
+version = "0.1.0"
+authors = ["tempate"]
+edition = "2018"
+
+[dependencies]
+rand = ">=0.6.5"
+nn = "0.1.6"
+lazy_static = "1.4.0"
