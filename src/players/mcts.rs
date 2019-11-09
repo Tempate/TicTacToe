@@ -1,32 +1,38 @@
 extern crate rand;
 use rand::Rng;
 
-use crate::board;
+use crate::players::player::Player;
+use crate::board::Board;
+use crate::board::State;
+
+pub struct MCTS {
+    pub n : usize
+}
 
 struct Node {
-    board: board::Board,
+    board: Board,
     move_: usize,
 
     reward: f64,
     visits: f64,
 }
 
-pub fn mcts(board: &board::Board, n: Option<usize>) -> (isize, usize) {
-    let m = n.unwrap_or(1000);
+impl MCTS {
+    fn search(&self, board: &Board) -> usize {
+        let copy = board.clone();
+        let mut root = Node { board: copy, move_: 0, reward: 0.0, visits: 0.0 };
+        let mut children: Vec<Node> = root.expand();
 
-    let copy = board.clone();
-    let mut root = Node { board: copy, move_: 0, reward: 0.0, visits: 0.0 };
-    let mut children: Vec<Node> = root.expand();
+        for _ in 0..self.n {
+            let cp: f64 = 0.5_f64.sqrt();
+            let node: &mut Node = root.tree_policy(&mut children, cp);
 
-    for _ in 0..m {
-        let cp: f64 = 0.5_f64.sqrt();
-        let node: &mut Node = root.tree_policy(&mut children, cp);
+            root.visits += 1.0;
+            node.random_rollout();
+        }
 
-        root.visits += 1.0;
-        node.random_rollout();
+        root.tree_policy(&mut children, 0.0).move_
     }
-
-    return (0, root.tree_policy(&mut children, 0.0).move_);
 }
 
 impl Node {
@@ -41,7 +47,7 @@ impl Node {
             nodes.push( Node { board: copy, move_: m, reward: 0.0, visits: 0.0 } );
         }
 
-        return nodes;
+        nodes
     }
 
     pub fn tree_policy<'a>(&self, children: &'a mut Vec<Node>, cp: f64) -> &'a mut Node {
@@ -70,7 +76,7 @@ impl Node {
         let mut copy = self.board.clone();
         let mut state = copy.state();
 
-        while state == board::State::Unfinished {
+        while state == State::Unfinished {
             let m: usize = copy.random_move();
             copy.make(m);
 
@@ -80,8 +86,8 @@ impl Node {
         self.visits += 1.0;
 
         match state {
-            board::State::Draw => self.reward += 0.5,
-            board::State::Unfinished => panic!("Unfinished random rollout."),
+            State::Draw => self.reward += 0.5,
+            State::Unfinished => panic!("Unfinished random rollout."),
             _ => {
                 if self.board.turn == copy.turn {
                     self.reward += 1.0
@@ -99,5 +105,11 @@ impl Node {
         let exploration = 2.0 * cp * (2.0 * self.visits.ln() / child.visits).sqrt();
         
         exploitation + exploration
+    }
+}
+
+impl Player for MCTS {
+    fn best_move(&self, board: &Board) -> usize {
+        self.search(board)
     }
 }

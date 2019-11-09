@@ -23,14 +23,21 @@ pub struct Board {
 
 impl Board {
     pub fn make(&mut self, index: usize) {
-        assert!(index >= 1 && index <= N2);
+        let sqr = 1 << (index - 1);
 
-        self.tiles[self.turn] ^= 1 << (index - 1);
+        assert!(index >= 1 && index <= N2);
+        assert_ne!(sqr & self.empty(), 0);
+
+        self.tiles[self.turn] ^= sqr;
         self.turn ^= 1;
     }
 
     pub fn inverse(&self) -> Board {
-        return Board { tiles: [self.tiles[PLAYER2], self.tiles[PLAYER1]], turn: self.turn ^ 1 };
+        Board { tiles: [self.tiles[PLAYER2], self.tiles[PLAYER1]], turn: self.turn ^ 1 }
+    }
+
+    pub fn empty(&self) -> u64 {
+        FULL ^ self.tiles[PLAYER1] ^ self.tiles[PLAYER2]
     }
 
     // Splits the board into an array of floats.
@@ -50,7 +57,7 @@ impl Board {
             }
         }
 
-        return data;
+        data
     }
 
     pub fn gen_moves(&self) -> Vec<usize> {
@@ -134,5 +141,54 @@ impl Board {
         let pick: usize = rand::thread_rng().gen_range(0, moves.len()) as usize;
         moves[pick]
     }
+
+    // Calculates moves that produce an instant win and 
+    // moves that prevent the opponent from winning instantly.
+    pub fn find_forced(&self) -> usize {
+        const MAX: u32 = (N - 1) as u32;
+
+        let empty = self.empty();
+        let mut forced_move = 0;
+
+        for comb in WINNING_COMBS.iter() {
+            if empty & comb != 0 {
+                if (self.tiles[self.turn] & comb).count_ones() == MAX {
+                    return (empty & comb).trailing_zeros() as usize + 1;
+                } 
+                
+                // A blocking move will only be played if there're no winning moves.
+                else if (self.tiles[self.turn ^ 1] & comb).count_ones() == MAX {
+                    forced_move = (empty & comb).trailing_zeros() as usize + 1;
+                }
+            }
+        }
+
+        forced_move
+    }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_forced() {
+        let tests = [
+            (board::Board { tiles: [0b100010100, 0b101001], turn: 0 }, 7),
+            (board::Board { tiles: [0b11000, 0b1], turn: 0 }, 6),
+            (board::Board { tiles: [0b100000000, 0b101], turn: 0 }, 2),
+            (board::Board { tiles: [0b1010001, 0b101110], turn: 0 }, 9),
+            (board::Board { tiles: [0b10001, 0b1000000], turn: 0 }, 9)
+        ];
+
+        for test in tests.iter() {
+            // Every test is performed for both turns to make sure it can 
+            // block winning moves and make winning moves.
+            let mut clone = test.0.clone();
+            clone.turn ^= 1;
+            
+            assert_eq!(find_forced(&test.0), test.1);
+            assert_eq!(find_forced(&clone), test.1);
+        }
+    }
+}

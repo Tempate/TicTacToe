@@ -3,125 +3,58 @@ extern crate rand;
 #[macro_use]
 extern crate lazy_static;
 
-use std::io;
-use std::io::Write;
 use rand::Rng;
 
-include!(concat!(env!("OUT_DIR"), "/lookup.rs"));
-
 mod board;
-mod minimax;
-mod alphabeta;
-mod mcts;
-mod supervised;
+mod players;
+
+use board::*;
+use players::*;
 
 fn main() {
-    let board = board::Board { tiles: [0, 0], turn: rand::thread_rng().gen_range(0, 2) };
+    let player1 = mcts::MCTS{n: 10000};
+    let player2 = alphabeta::AlphaBeta{};
 
-    let mut net = supervised::SupervisedNetwork::init();
-    net.train();
-    net.test();
+    //let player2 = networks::supervised::SupervisedNetwork::init();
+
+    play_match(player1, player2, 1000);
 }
 
-fn play_mcts_minimax(mut board: board::Board, n: usize) {
-    let mut mcts_wins = 0;
-    let mut minimax_wins = 0;
-    let mut draws = 0;
+fn play_match<T, K>(player1: T, player2: K, n: usize) where T: player::Player, K: player::Player {
+    let mut player1_wins = 0;
+    let mut player2_wins = 0;
 
-    println!("{}", n);
-
-    for i in 0..n {
-        board.tiles = [0, 0];
-        board.turn = rand::thread_rng().gen_range(0, 2);
-
-        while board.state() == board::State::Unfinished {
-            if board.turn == board::PLAYER1 {
-                let (_, m) = mcts::mcts(&board, Some(10000));
-                board.make(m);
-            } else {
-                let (_, m) = minimax::minimax(&board);
-                board.make(m);
-            }
-        }
-
-        match board.state() {
-            board::State::Player1Won => mcts_wins += 1,
-            board::State::Player2Won => minimax_wins += 1,
-            board::State::Draw => draws += 1,
-            _ => panic!("Unfinished state after the game ended.")
-        }
-
-        if i % 10 == 9 {
-            println!("MCTS vs Minimax: {} - {} - {}\n", mcts_wins, minimax_wins, draws);
+    for _ in 0..n {
+        match play_game(&player1, &player2) {
+            1  => player1_wins += 1,
+            -1 => player2_wins += 1,
+            _  => ()
         }
     }
 
-    assert_eq!(mcts_wins + minimax_wins + draws, n);
+    let draws = n - player1_wins - player2_wins;
+    println!("{} - {} - {}", player1_wins, player2_wins, draws);
 }
 
-fn play_human_alphabeta(mut board: board::Board) {
-    while board.state() == board::State::Unfinished {
+fn play_game<T, K>(player1: &T, player2: &K) -> isize where T: player::Player, K: player::Player {
+    let mut board = Board { tiles: [0, 0], turn: rand::thread_rng().gen_range(0, 2) };
 
-        if board.turn == board::PLAYER2 {
-            let (_, m) = alphabeta::alphabeta(&board, -2, 2);
-            board.make(m);
-            board.print();
+    while board.state() == State::Unfinished {
+        let move_;
+
+        if board.turn == PLAYER1 {
+            move_ = player1.best_move(&board);
         } else {
-            let m: usize = get_input();
-            board.make(m);
+            move_ = player2.best_move(&board);
         }
+
+        board.make(move_);
     }
 
     match board.state() {
-        board::State::Player1Won => println!("X won"),
-        board::State::Player2Won => println!("O won"),
-        board::State::Draw => println!("Draw"),
+        State::Player1Won => 1,
+        State::Player2Won => -1,
+        State::Draw => 0,
         _ => panic!("Unfinished state after the game ended.")
     }
-}
-
-/*
-fn play_human_nn(mut board: board::Board) {
-    let mut net = NN::new(&[9, 9, 1]);
-
-    supervised::train_network(&net);
-
-    while board.state() == board::State::Unfinished {
-
-        if board.turn == board::PLAYER2 {
-            let (_, m) = net.run(board.split().to_vec());
-            board.make(m);
-            board.print();
-        } else {
-            let m: usize = get_input();
-            board.make(m);
-        }
-    }
-
-    match board.state() {
-        board::State::Player1Won => println!("X won"),
-        board::State::Player2Won => println!("O won"),
-        board::State::Draw => println!("Draw"),
-        _ => panic!("Unfinished state after the game ended.")
-    }
-}
-*/
-
-fn get_input() -> usize {
-    let mut input = String::new();
-    let m: usize;
-
-    print!("Enter move: ");
-    io::stdout().flush().unwrap();
-
-    match io::stdin().read_line(&mut input) {
-        Ok(_) => {
-            m = input.trim().parse::<usize>().unwrap();
-        }
-        Err(error) => panic!("Error: {}", error),
-    }
-
-    assert!(m >= 1 && m <= N2);
-
-    return m;
 }
