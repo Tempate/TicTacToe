@@ -1,15 +1,22 @@
 use nn::{NN, HaltCondition};
 
-include!(concat!(env!("OUT_DIR"), "/lookup.rs"));
+use crate::constants::*;
 
-use crate::board::*;
-use crate::players::*;
+use crate::board;
+use crate::board::{Board, State};
 
-use crate::players::player::Player;
-use crate::players::networks::network::Network;
+use crate::players::{
+    player::Player, 
+    networks::network::Network,
+    alphabeta::AlphaBeta    
+};
 
 lazy_static! {
-    static ref ALL_BOARDS: Vec<Board> = leaf_boards(&Board{ tiles: [0, 0], turn: 0 });
+    static ref ALL_BOARDS: Vec<Board> = {
+        let mut v = Vec::new();
+        leaf_boards(Board{tiles: [0, 0], turn: 0}, &mut v);
+        v
+    };
 }
 
 pub struct SupervisedNetwork {
@@ -56,7 +63,7 @@ impl Network for SupervisedNetwork {
 
         let mut data = Vec::new();
 
-        let ab = alphabeta::AlphaBeta{};
+        let ab = AlphaBeta{};
 
         for board in ALL_BOARDS.iter() {
             let move_ = ab.best_move(&board);
@@ -73,7 +80,7 @@ impl Network for SupervisedNetwork {
             data.push((input_board.to_vec(), target.to_vec()));
         }
 
-        for _ in 0..10 {
+        for _ in 0..100 {
             self.nn.train(&data)
                 .halt_condition( HaltCondition::Epochs(self.epochs) )
                 .rate(lr)
@@ -87,7 +94,7 @@ impl Network for SupervisedNetwork {
     // times it gets the correct move.
     fn test(&self) {
         let mut correct = 0.0;
-        let ab = alphabeta::AlphaBeta{};
+        let ab = AlphaBeta{};
 
         for board in ALL_BOARDS.iter() {
             let guess = self.play(&board);
@@ -103,24 +110,31 @@ impl Network for SupervisedNetwork {
 }
 
 // Generates all the possible unfinished boards
-fn leaf_boards(board: &Board) -> Vec<Board> {
+fn leaf_boards(board: Board, boards: &mut Vec<Board>) {
     assert!(board.state() == State::Unfinished);
 
     let moves: Vec<usize> = board.gen_moves();
     assert!(moves.len() > 0);
 
-    let mut boards: Vec<Board> = vec![*board, board.inverse()];
+    for b in boards.iter() {
+        if  board.tiles[board::PLAYER1] == b.tiles[board::PLAYER1] &&
+            board.tiles[board::PLAYER2] == b.tiles[board::PLAYER2] &&
+            board.turn == b.turn {
+                return;
+        }
+    }
+
+    boards.push(board);
+    boards.push(board.inverse());
 
     for m in moves {
         let mut new_board = board.clone();
         new_board.make(m);
 
         if new_board.state() == State::Unfinished {
-            boards.append(&mut leaf_boards(&new_board));
+            leaf_boards(new_board, boards);
         }
     }
-
-    boards
 }
 
 #[cfg(test)]
@@ -129,8 +143,9 @@ mod tests {
 
     #[test]
     fn test_gen_all_boards() {
-        let blank_board = Board { tiles: [0, 0], turn: 0 };
-        let boards = leaf_boards(&blank_board);
+        let mut boards: Vec<Board> = Vec::new();
+        
+        leaf_boards(Board{tiles: [0, 0], turn: 0}, &mut boards);
 
         let test_boards = [
             Board { tiles: [0, 0], turn: 0 },
@@ -147,6 +162,23 @@ mod tests {
 
         for board in test_boards.iter() {
             boards.contains(board);
+        }
+    }
+
+    #[test]
+    fn test_repeated_boards() {
+        for i in 0..ALL_BOARDS.len() {
+            let board1 = ALL_BOARDS[i];
+
+            for j in i+1..ALL_BOARDS.len() {
+                let board2 = ALL_BOARDS[j];
+
+                assert!(
+                    board1.tiles[board::PLAYER1] != board2.tiles[board::PLAYER1] ||
+                    board1.tiles[board::PLAYER2] != board2.tiles[board::PLAYER2] ||
+                    board1.turn != board2.turn
+                );
+            }
         }
     }
 }
