@@ -1,7 +1,8 @@
 extern crate rand;
 use rand::Rng;
 
-include!(concat!(env!("OUT_DIR"), "/lookup.rs"));
+use crate::constants::*;
+use crate::bitboards::*;
 
 pub const FULL: u64 = !0_u64 >> (64 - N2);
 pub const PLAYER1: usize = 0;
@@ -102,7 +103,7 @@ impl Board {
     }
 
     pub fn state(&self) -> State {
-        for comb in WINNING_COMBS.iter() {
+        for comb in WINNING_STATES.iter() {
             if self.tiles[PLAYER1] & comb == *comb {
                 return State::Player1Won;
             } else if self.tiles[PLAYER2] & comb == *comb {
@@ -123,7 +124,7 @@ impl Board {
     }
 
     pub fn score(&self) -> isize {
-        for comb in WINNING_COMBS.iter() {
+        for comb in WINNING_STATES.iter() {
             if self.tiles[self.turn] & comb == *comb {
                 return 1;
             } else if self.tiles[self.turn ^ 1] & comb == *comb {
@@ -150,7 +151,7 @@ impl Board {
         let empty = self.empty();
         let mut forced_move = 0;
 
-        for comb in WINNING_COMBS.iter() {
+        for comb in WINNING_STATES.iter() {
             if empty & comb != 0 {
                 if (self.tiles[self.turn] & comb).count_ones() == MAX {
                     return (empty & comb).trailing_zeros() as usize + 1;
@@ -174,21 +175,23 @@ mod tests {
     #[test]
     fn test_find_forced() {
         let tests = [
-            (board::Board { tiles: [0b100010100, 0b101001], turn: 0 }, 7),
-            (board::Board { tiles: [0b11000, 0b1], turn: 0 }, 6),
-            (board::Board { tiles: [0b100000000, 0b101], turn: 0 }, 2),
-            (board::Board { tiles: [0b1010001, 0b101110], turn: 0 }, 9),
-            (board::Board { tiles: [0b10001, 0b1000000], turn: 0 }, 9)
+            (Board { tiles: [0b100010100, 0b101001], turn: 0 }, 7),
+            (Board { tiles: [0b11000, 0b1], turn: 0 }, 6),
+            (Board { tiles: [0b100000000, 0b101], turn: 0 }, 2),
+            (Board { tiles: [0b1010001, 0b101110], turn: 0 }, 9),
+            (Board { tiles: [0b10001, 0b1000000], turn: 0 }, 9)
         ];
 
         for test in tests.iter() {
+            let board = test.0;
+
             // Every test is performed for both turns to make sure it can 
             // block winning moves and make winning moves.
-            let mut clone = test.0.clone();
+            let mut clone = board.clone();
             clone.turn ^= 1;
             
-            assert_eq!(find_forced(&test.0), test.1);
-            assert_eq!(find_forced(&clone), test.1);
+            assert_eq!(board.find_forced(), test.1);
+            assert_eq!(board.find_forced(), test.1);
         }
     }
 }

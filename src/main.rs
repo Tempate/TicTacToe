@@ -1,23 +1,28 @@
 extern crate rand;
+use rand::Rng;
 
 #[macro_use]
 extern crate lazy_static;
 
-use rand::Rng;
-
 mod board;
 mod players;
+mod constants;
+mod bitboards;
 
 use board::*;
 use players::*;
 
 fn main() {
-    let player1 = mcts::MCTS{n: 10000};
-    let player2 = alphabeta::AlphaBeta{};
+    let player1 = mcts::MCTS{n: 10};
+    let mut player2 = networks::supervised::SupervisedNetwork::init();
 
-    //let player2 = networks::supervised::SupervisedNetwork::init();
+    train_network(&mut player2);
+    //play_match(player1, player2, 10);
+}
 
-    play_match(player1, player2, 1000);
+fn train_network<T>(net: &mut T) where T: networks::network::Network {
+    net.train();
+    net.test();
 }
 
 fn play_match<T, K>(player1: T, player2: K, n: usize) where T: player::Player, K: player::Player {

@@ -1,7 +1,6 @@
+use crate::constants::*;
 use crate::players::player::Player;
 use crate::board::{Board, State};
-
-include!(concat!(env!("OUT_DIR"), "/lookup.rs"));
 
 pub struct AlphaBeta;
 
